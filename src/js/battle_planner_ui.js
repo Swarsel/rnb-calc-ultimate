@@ -3410,7 +3410,7 @@
     /**
      * Show KO replacement modal
      */
-    function showKOReplacementModal(side, state, onComplete) {
+    function showKOReplacementModal(side, state, onComplete, titleOverride) {
         var team = side === 'p1' ? state.p1.team : state.p2.team;
         var activeSlot = side === 'p1' ? state.p1.teamSlot : state.p2.teamSlot;
 
@@ -3436,7 +3436,8 @@
         pendingKOReplacement = { side: side, state: state, onComplete: onComplete };
 
         var sideLabel = side === 'p1' ? 'Your' : "Opponent's";
-        $('#ko-replacement-title').text(sideLabel + ' Pokemon Fainted!');
+        var title = titleOverride || (sideLabel + ' Pokemon Fainted!');
+        $('#ko-replacement-title').text(title);
         $('#ko-replacement-text').text('Select a replacement Pokemon:');
 
         var gridHtml = availableSlots.map(function (slot) {
@@ -3716,6 +3717,8 @@
                 var secondAttacker = newState[secondMover].active;
                 var secondDefender = newState[firstMover].active;
                 var secondAttackerKO = secondAttacker.currentHP <= 0;
+
+                // Explicitly check for forced switch
                 var secondForcedToSwitch = pendingForcedSwitch[secondMover];
 
                 if (!secondAttackerKO && !secondForcedToSwitch) {
@@ -3866,19 +3869,24 @@
                 // Handle KO replacements if needed
                 if (needsP1Replacement && needsP2Replacement) {
                     // Both need replacement
+                    var p1Title = p1ForcedSwitch ? "Your Pokemon Forced to Switch!" : null;
+                    var p2Title = p2ForcedSwitch ? "Opponent Forced to Switch!" : null;
+
                     showKOReplacementModal('p1', newState, function (p1Rep) {
                         showKOReplacementModal('p2', newState, function (p2Rep) {
                             completeTurn(p1Rep, p2Rep);
-                        });
-                    });
+                        }, p2Title);
+                    }, p1Title);
                 } else if (needsP1Replacement) {
+                    var p1Title = p1ForcedSwitch ? "Your Pokemon Forced to Switch!" : null;
                     showKOReplacementModal('p1', newState, function (p1Rep) {
                         completeTurn(p1Rep, null);
-                    });
+                    }, p1Title);
                 } else if (needsP2Replacement) {
+                    var p2Title = p2ForcedSwitch ? "Opponent Forced to Switch!" : null;
                     showKOReplacementModal('p2', newState, function (p2Rep) {
                         completeTurn(null, p2Rep);
-                    });
+                    }, p2Title);
                 } else {
                     completeTurn(null, null);
                 }
@@ -3890,6 +3898,8 @@
 
             if (firstMoverNeedsSwitchNow) {
                 // Show switch modal for first mover, then execute second action
+                // Use custom title for U-turn/Volt Switch
+                var switchTitle = "Select Pokemon to switch to (U-turn/Volt Switch):";
                 showKOReplacementModal(firstMover, newState, function (switchChoice) {
                     if (switchChoice !== null && switchChoice !== undefined) {
                         // Execute the switch immediately
@@ -3903,7 +3913,7 @@
                         // Continue with the rest of the turn
                         continueTurnAfterActions();
                     });
-                });
+                }, switchTitle);
                 return; // Exit early - continueTurnAfterActions will be called in callback
             } else {
                 // No immediate switch needed, execute second action synchronously
