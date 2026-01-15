@@ -1077,56 +1077,65 @@
             return;
         }
 
-        // Enforce 6 Pokemon max in team
-        if (target.destination === 'team') {
-            var currentTeamSize = state.p1.team ? state.p1.team.length : 0;
-            if (source.source === 'box' && currentTeamSize >= 6) {
-                alert('Maximum team size is 6 Pokemon!');
-                return;
-            }
-        }
-
         var pokemon = null;
 
         // Get the pokemon from source
         if (source.source === 'team') {
             pokemon = state.p1.team[source.index];
-            if (!pokemon) return;
         } else {
             pokemon = uiState.p1Box[source.index];
-            if (!pokemon) return;
         }
+        if (!pokemon) return;
 
-        // Just update the UI state - don't create tree branch
         if (source.source === 'team' && target.destination === 'box') {
-            // Move from team to box - update current state directly
-            var removedPoke = state.p1.team.splice(source.index, 1)[0];
-            if (removedPoke) {
-                uiState.p1Box.push(removedPoke);
-            }
-            // Update active if needed
-            if (state.p1.teamSlot >= state.p1.team.length) {
-                state.p1.teamSlot = Math.max(0, state.p1.team.length - 1);
-            }
-            if (state.p1.team.length > 0) {
-                state.p1.active = state.p1.team[state.p1.teamSlot];
-            }
+            // Move from team to box
+            state.p1.team.splice(source.index, 1);
+            uiState.p1Box.push(pokemon);
         } else if (source.source === 'box' && target.destination === 'team') {
             // Move from box to team
-            var addedPoke = uiState.p1Box.splice(source.index, 1)[0];
-            if (addedPoke) {
-                state.p1.team.push(addedPoke);
+            if (state.p1.team.length >= 6 && (target.index === undefined || target.index >= state.p1.team.length)) {
+                alert('Maximum team size is 6 Pokemon!');
+                return;
+            }
+
+            uiState.p1Box.splice(source.index, 1);
+
+            if (target.index !== undefined && target.index < state.p1.team.length) {
+                // Swap box pokemon with team pokemon
+                var oldPoke = state.p1.team[target.index];
+                state.p1.team[target.index] = pokemon;
+                uiState.p1Box.push(oldPoke);
+            } else {
+                // Add to team
+                state.p1.team.push(pokemon);
             }
         } else if (source.source === 'team' && target.destination === 'team') {
             // Swap within team
-            if (source.index !== target.index) {
-                var temp = state.p1.team[source.index];
-                state.p1.team[source.index] = state.p1.team[target.index];
-                state.p1.team[target.index] = temp;
+            if (source.index !== target.index && target.index !== undefined) {
+                if (target.index < state.p1.team.length) {
+                    var temp = state.p1.team[source.index];
+                    state.p1.team[source.index] = state.p1.team[target.index];
+                    state.p1.team[target.index] = temp;
+                } else {
+                    // Moving to an empty slot at the end
+                    state.p1.team.splice(source.index, 1);
+                    state.p1.team.push(pokemon);
+                }
             }
         }
 
-        // Just re-render, don't create branch
+        // Clean up any undefined in team
+        state.p1.team = state.p1.team.filter(function (p) { return !!p; });
+
+        // Update active/slot if needed
+        if (state.p1.teamSlot >= state.p1.team.length) {
+            state.p1.teamSlot = Math.max(0, state.p1.team.length - 1);
+        }
+        if (state.p1.team.length > 0) {
+            state.p1.active = state.p1.team[state.p1.teamSlot];
+        }
+
+        // Just re-render
         renderStage();
     }
 
@@ -2356,43 +2365,54 @@
             return;
         }
 
-        var html = team.map(function (poke, i) {
-            var isActive = i === activeSlot;
-            var isFainted = poke.currentHP <= 0 || poke.hasFainted;
-            var classes = ['team-overview-slot'];
-            if (isActive) classes.push('active');
-            if (isFainted) classes.push('fainted');
+        var html = '';
+        var renderedEmpty = false;
+        for (var i = 0; i < 6; i++) {
+            var poke = team[i];
+            if (poke) {
+                var isActive = i === activeSlot;
+                var isFainted = poke.currentHP <= 0 || poke.hasFainted;
+                var classes = ['team-overview-slot'];
+                if (isActive) classes.push('active');
+                if (isFainted) classes.push('fainted');
 
-            // Calculate HP percentage properly
-            var hpPercent = poke.maxHP > 0 ? Math.round((poke.currentHP / poke.maxHP) * 100) : 0;
-            if (isFainted) hpPercent = 0;
-            var hpColor = hpPercent > 50 ? 'hp-green' : hpPercent > 20 ? 'hp-yellow' : 'hp-red';
+                // Calculate HP percentage properly
+                var hpPercent = poke.maxHP > 0 ? Math.round((poke.currentHP / poke.maxHP) * 100) : 0;
+                if (isFainted) hpPercent = 0;
+                var hpColor = hpPercent > 50 ? 'hp-green' : hpPercent > 20 ? 'hp-yellow' : 'hp-red';
 
-            // Use same sprite source as main app
-            var spriteUrl = 'https://raw.githubusercontent.com/May8th1995/sprites/master/' + poke.name + '.png';
-            var fallbackUrl = 'https://play.pokemonshowdown.com/sprites/gen5/' + poke.name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '') + '.png';
+                // Use same sprite source as main app
+                var spriteUrl = 'https://raw.githubusercontent.com/May8th1995/sprites/master/' + poke.name + '.png';
+                var fallbackUrl = 'https://play.pokemonshowdown.com/sprites/gen5/' + poke.name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '') + '.png';
 
-            var statusBadge = '';
-            if (isFainted) {
-                statusBadge = '<span class="team-slot-status fainted">FAINTED</span>';
-            } else if (poke.status) {
-                statusBadge = '<span class="team-slot-status ' + poke.status + '">' + poke.status.toUpperCase() + '</span>';
+                var statusBadge = '';
+                if (isFainted) {
+                    statusBadge = '<span class="team-slot-status fainted">FAINTED</span>';
+                } else if (poke.status) {
+                    statusBadge = '<span class="team-slot-status ' + poke.status + '">' + poke.status.toUpperCase() + '</span>';
+                }
+
+                var itemBadge = poke.item ? '<span class="team-slot-item" title="' + poke.item + '">🎒</span>' : '';
+
+                html += '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" data-side="' + side + '" draggable="true" title="' + poke.name + ' - ' + poke.currentHP + '/' + poke.maxHP + ' HP">' +
+                    '<button class="team-lead-btn" data-side="' + side + '" data-index="' + i + '" title="Set as lead">★</button>' +
+                    '<button class="team-item-btn" data-side="' + side + '" data-index="' + i + '" title="Change item">🎒</button>' +
+                    '<img class="team-slot-sprite" src="' + spriteUrl + '" alt="' + poke.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
+                    '<div class="team-slot-info">' +
+                    '<div class="team-slot-name">' + poke.name + (poke.item ? ' <span class="team-item-name">(' + poke.item + ')</span>' : '') + '</div>' +
+                    '<div class="team-slot-hp-bar"><div class="team-slot-hp-fill ' + hpColor + '" style="width: ' + hpPercent + '%"></div></div>' +
+                    '<div class="team-slot-hp-text">' + Math.max(0, poke.currentHP) + '/' + poke.maxHP + '</div>' +
+                    statusBadge +
+                    '</div>' +
+                    '</div>';
+            } else if (side === 'p1' && !renderedEmpty) {
+                // Empty slot for P1 - only show ONE
+                html += '<div class="team-overview-slot empty" data-slot-index="' + i + '" data-side="' + side + '" title="Drag Pokemon here to add to team">' +
+                    '<div class="team-slot-empty-icon">+</div>' +
+                    '</div>';
+                renderedEmpty = true;
             }
-
-            var itemBadge = poke.item ? '<span class="team-slot-item" title="' + poke.item + '">🎒</span>' : '';
-
-            return '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" data-side="' + side + '" draggable="true" title="' + poke.name + ' - ' + poke.currentHP + '/' + poke.maxHP + ' HP">' +
-                '<button class="team-lead-btn" data-side="' + side + '" data-index="' + i + '" title="Set as lead">★</button>' +
-                '<button class="team-item-btn" data-side="' + side + '" data-index="' + i + '" title="Change item">🎒</button>' +
-                '<img class="team-slot-sprite" src="' + spriteUrl + '" alt="' + poke.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
-                '<div class="team-slot-info">' +
-                '<div class="team-slot-name">' + poke.name + (poke.item ? ' <span class="team-item-name">(' + poke.item + ')</span>' : '') + '</div>' +
-                '<div class="team-slot-hp-bar"><div class="team-slot-hp-fill ' + hpColor + '" style="width: ' + hpPercent + '%"></div></div>' +
-                '<div class="team-slot-hp-text">' + Math.max(0, poke.currentHP) + '/' + poke.maxHP + '</div>' +
-                statusBadge +
-                '</div>' +
-                '</div>';
-        }).join('');
+        }
 
         $container.html(html);
     }
@@ -3356,14 +3376,15 @@
     }
 
     /**
-     * Set a Pokemon as the team lead (creates new start node if different)
+     * Set a Pokemon as the team lead (reorders team and updates state)
      */
     function setTeamLead(side, index) {
         var currentNode = uiState.tree.getCurrentNode();
         if (!currentNode) return;
 
         var state = currentNode.state;
-        var team = side === 'p1' ? state.p1.team : state.p2.team;
+        var sideState = side === 'p1' ? state.p1 : state.p2;
+        var team = sideState.team;
 
         if (!team || !team[index]) return;
 
@@ -3373,14 +3394,13 @@
             return;
         }
 
-        // Update the team slot
-        if (side === 'p1') {
-            state.p1.teamSlot = index;
-            state.p1.active = team[index];
-        } else {
-            state.p2.teamSlot = index;
-            state.p2.active = team[index];
-        }
+        // Reorder: Move team[index] to team[0]
+        var poke = team.splice(index, 1)[0];
+        team.unshift(poke);
+
+        // After reordering, the lead is always at index 0
+        sideState.teamSlot = 0;
+        sideState.active = team[0];
 
         // Re-render to show the change
         renderStage();
