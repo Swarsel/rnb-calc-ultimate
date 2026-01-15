@@ -1285,3 +1285,38 @@ body.rc-selecting-target .trainer-pok-opposing {
 .poke-info .info-group > div:has(input.level) input.level {
     flex-shrink: 0;
 }
+
+/* ============================================
+   Battle Planner Launch Button
+   ============================================ */
+.planner-launch-btn {
+    margin-left: 20px;
+    padding: 6px 16px;
+    background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+    border: 1px solid #00d4ff;
+    border-radius: 8px;
+    color: #0d1117;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    vertical-align: middle;
+}
+
+.planner-launch-btn:hover {
+    background: linear-gradient(135deg, #33ddff 0%, #00aadd 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+}
+
+.planner-launch-btn:active {
+    transform: translateY(0);
+}
+
+/* Dark theme adjustments for planner button */
+.dark-theme .planner-launch-btn {
+    color: #0d1117;
+}

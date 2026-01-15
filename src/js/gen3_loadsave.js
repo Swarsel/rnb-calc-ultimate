@@ -391,8 +391,26 @@ function dispatchSavefileMons(list) {
     
     if (addedCount > 0) {
         $(allPokemon("#importedSetsOptions")).css("display", "inline");
-        alert("Imported " + addedCount + " Pokemon from savefile.");
+        
+        // Offer to start Battle Planner with imported Pokemon
+        var startPlanner = confirm(
+            "Imported " + addedCount + " Pokemon from savefile.\n\n" +
+            "Would you like to open the Battle Planner to plan your battles?"
+        );
+        
+        if (startPlanner && window.BattlePlannerUI) {
+            // Store the imported team for planner use
+            window.importedTeam = list.filter(function(p) { return p && p.name; });
+            window.BattlePlannerUI.show();
+        }
     }
+}
+
+/**
+ * Get imported Pokemon for Battle Planner
+ */
+function getImportedTeam() {
+    return window.importedTeam || [];
 }
 
 function parseFileGen3(file){
