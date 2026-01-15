@@ -2393,10 +2393,13 @@
                 }
 
                 var itemBadge = poke.item ? '<span class="team-slot-item" title="' + poke.item + '">🎒</span>' : '';
-
-                html += '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" data-side="' + side + '" draggable="true" title="' + poke.name + ' - ' + poke.currentHP + '/' + poke.maxHP + ' HP">' +
+                var isP1 = side === 'p1';
+                var buttons = isP1 ?
                     '<button class="team-lead-btn" data-side="' + side + '" data-index="' + i + '" title="Set as lead">★</button>' +
-                    '<button class="team-item-btn" data-side="' + side + '" data-index="' + i + '" title="Change item">🎒</button>' +
+                    '<button class="team-item-btn" data-side="' + side + '" data-index="' + i + '" title="Change item">🎒</button>' : '';
+
+                html += '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" data-side="' + side + '" draggable="' + (isP1 ? 'true' : 'false') + '" title="' + poke.name + ' - ' + poke.currentHP + '/' + poke.maxHP + ' HP">' +
+                    buttons +
                     '<img class="team-slot-sprite" src="' + spriteUrl + '" alt="' + poke.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
                     '<div class="team-slot-info">' +
                     '<div class="team-slot-name">' + poke.name + (poke.item ? ' <span class="team-item-name">(' + poke.item + ')</span>' : '') + '</div>' +
