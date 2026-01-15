@@ -2361,8 +2361,12 @@
         var $container = $('#team-overview-slots-' + side);
 
         if (!team || team.length === 0) {
-            $container.html('<div class="team-empty">No team loaded</div>');
-            return;
+            if (side === 'p1') {
+                team = [];
+            } else {
+                $container.html('<div class="team-empty">No team loaded</div>');
+                return;
+            }
         }
 
         var html = '';
