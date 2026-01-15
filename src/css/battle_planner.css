@@ -3528,6 +3528,7 @@ body.planner-active {
 
 .item-search-input {
     width: 100%;
+    box-sizing: border-box;
     padding: 8px 12px;
     border: 1px solid var(--planner-border);
     border-radius: 6px;
@@ -3536,26 +3537,33 @@ body.planner-active {
     font-size: 14px;
 }
 
-.item-search-input:focus {
-    outline: none;
-    border-color: var(--planner-accent);
+.item-search-container {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--planner-border);
+    background: rgba(0, 0, 0, 0.2);
 }
 
 .item-select-grid {
-    max-height: 300px;
+    max-height: 400px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    padding: 10px 15px;
 }
 
 .item-select-option {
-    padding: 8px 12px;
+    padding: 10px 12px;
     background: var(--planner-panel-bg);
     border: 1px solid var(--planner-border);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s;
+    font-size: 13px;
+}
+
+#item-select-modal .modal-content {
+    min-width: 400px;
 }
 
 .item-select-option:hover {

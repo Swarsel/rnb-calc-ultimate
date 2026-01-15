@@ -3092,7 +3092,6 @@
         }
 
         // Re-render
-        renderTeamPanel();
         renderStage();
     }
 
