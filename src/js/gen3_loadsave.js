@@ -375,9 +375,35 @@ function dispatchSavefileMons(list) {
     }
     
     var addedCount = 0;
+    var updatedCount = 0;
+    
     for (var i = 0; i < list.length; i++) {
         var poke = list[i];
         if (!poke.name) continue;
+        
+        // Check if a Pokemon with the same personality exists under a different name (evolution case)
+        // This handles the case where Torchic evolved to Combusken - we need to remove the old entry
+        if (poke.person) {
+            var namePropToFind = "Save-" + poke.person;
+            for (var existingName in customsets) {
+                if (existingName !== poke.name && customsets[existingName]) {
+                    for (var setName in customsets[existingName]) {
+                        var existingSet = customsets[existingName][setName];
+                        // Check if this is the same Pokemon (same personality) but different name
+                        if (existingSet && existingSet.person === poke.person) {
+                            console.log('Evolution detected: ' + existingName + ' -> ' + poke.name + ' (personality: ' + poke.person + ')');
+                            // Remove the old entry
+                            delete customsets[existingName][setName];
+                            // If no more sets under this name, clean up
+                            if (Object.keys(customsets[existingName]).length === 0) {
+                                delete customsets[existingName];
+                            }
+                            updatedCount++;
+                        }
+                    }
+                }
+            }
+        }
         
         if (!customsets[poke.name]) {
             customsets[poke.name] = {};
@@ -392,16 +418,23 @@ function dispatchSavefileMons(list) {
     if (addedCount > 0) {
         $(allPokemon("#importedSetsOptions")).css("display", "inline");
         
+        // Build status message
+        var message = "Imported " + addedCount + " Pokemon from savefile.";
+        if (updatedCount > 0) {
+            message += "\n(" + updatedCount + " evolution(s) detected and updated)";
+        }
+        message += "\n\nWould you like to open the Battle Planner to plan your battles?";
+        
         // Offer to start Battle Planner with imported Pokemon
-        var startPlanner = confirm(
-            "Imported " + addedCount + " Pokemon from savefile.\n\n" +
-            "Would you like to open the Battle Planner to plan your battles?"
-        );
+        var startPlanner = confirm(message);
         
         if (startPlanner && window.BattlePlannerUI) {
             // Store the imported team for planner use
             window.importedTeam = list.filter(function(p) { return p && p.name; });
             window.BattlePlannerUI.show();
+        } else if (window.BattlePlannerUI && window.BattlePlannerUI.refreshBox) {
+            // Just refresh the box if planner is already open or user declined
+            window.BattlePlannerUI.refreshBox();
         }
     }
 }

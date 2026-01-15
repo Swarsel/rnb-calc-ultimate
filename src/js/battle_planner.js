@@ -669,6 +669,7 @@ BattleTree.prototype.initialize = function(initialState) {
     this.nodes = {};
     this.nodes[rootNode.id] = rootNode;
     this.rootId = rootNode.id;
+    this.rootIds = [rootNode.id]; // Initialize rootIds array
     this.currentNodeId = rootNode.id;
     this.undoStack = [];
     this.redoStack = [];
@@ -687,6 +688,57 @@ BattleTree.prototype.getCurrentNode = function() {
 
 BattleTree.prototype.getRootNode = function() {
     return this.getNode(this.rootId);
+};
+
+// Support multiple roots for different team configurations
+BattleTree.prototype.rootIds = [];
+
+BattleTree.prototype.addRoot = function(initialState, label) {
+    var rootNode = new BattleNode(null, initialState, null, null);
+    rootNode.label = label || 'Battle Start';
+    
+    this.nodes[rootNode.id] = rootNode;
+    
+    // Track multiple roots - ensure array is initialized
+    if (!Array.isArray(this.rootIds)) {
+        this.rootIds = [];
+    }
+    
+    // Add existing root to array if not already there
+    if (this.rootId && this.rootIds.indexOf(this.rootId) === -1) {
+        this.rootIds.push(this.rootId);
+    }
+    
+    // Add new root
+    if (this.rootIds.indexOf(rootNode.id) === -1) {
+        this.rootIds.push(rootNode.id);
+    }
+    
+    // Set as current root
+    this.rootId = rootNode.id;
+    this.currentNodeId = rootNode.id;
+    
+    this._fireEvent('onTreeUpdated');
+    return rootNode;
+};
+
+BattleTree.prototype.getAllRoots = function() {
+    var self = this;
+    var roots = [];
+    
+    if (!this.rootIds || this.rootIds.length === 0) {
+        if (this.rootId) {
+            return [this.getNode(this.rootId)];
+        }
+        return [];
+    }
+    
+    this.rootIds.forEach(function(id) {
+        var node = self.getNode(id);
+        if (node) roots.push(node);
+    });
+    
+    return roots;
 };
 
 BattleTree.prototype.navigate = function(nodeId) {
