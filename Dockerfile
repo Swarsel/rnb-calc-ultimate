@@ -3,15 +3,11 @@ FROM node:20-alpine
 # Set up the main working directory
 WORKDIR /usr/src/app
 
-# Copy package files first for better caching
-COPY package*.json ./
-COPY calc/package*.json ./calc/
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the application
+# Copy all files (needed for subpkg to work correctly)
 COPY . .
+
+# Install all dependencies (postinstall will set up subpackages)
+RUN npm install
 
 # Build the project
 RUN npm run build
