@@ -1,23 +1,22 @@
-FROM node:12
+FROM node:20-alpine
 
 # Set up the main working directory
 WORKDIR /usr/src/app
+
+# Copy package files first for better caching
+COPY package*.json ./
+COPY calc/package*.json ./calc/
+
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the application
 COPY . .
 
-# Install root dependencies
-RUN npm install
+# Build the project
+RUN npm run build
 
-# Install dependencies for the 'calc' module separately
-WORKDIR /usr/src/app/calc
-RUN npm install
-
-# Return to the root directory
-WORKDIR /usr/src/app
-
-# Build the project (if needed)
-RUN node build || true
-
-# Expose the app's port
+# Expose the app's port (Railway uses PORT env variable)
 EXPOSE 3000
 
 # Run the server
