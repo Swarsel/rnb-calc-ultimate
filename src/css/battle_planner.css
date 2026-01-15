@@ -3336,6 +3336,17 @@ body.planner-active {
     color: var(--planner-text-muted);
 }
 
+/* Move effect options - display checkboxes one per line */
+.move-effect-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.move-effect-options > label {
+    display: block;
+}
+
 /* Move effect inline options */
 .me-inline-option {
     display: flex;
