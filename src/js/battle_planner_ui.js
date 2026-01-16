@@ -47,7 +47,12 @@
         turnMode: true,  // Both sides must select moves
         p1Action: null,  // { type: 'move'|'switch', index: number }
         p2Action: null,
-        moveDamageCache: {} // Cache for move damage calculations
+        moveDamageCache: {}, // Cache for move damage calculations
+        p1HoverOverride: null, // Pokemon index being hovered
+        p2HoverOverride: null,
+        p1BoxHoverOverride: null, // Pokemon index in box being hovered
+        p2BoxHoverOverride: null,
+        lastRenderedNodeId: null
     };
 
     // DOM References
@@ -723,6 +728,81 @@
                 var name = $(this).data('name');
                 setSwitchAction(side, index, name);
                 $('#switch-select-modal').hide();
+            }
+        });
+
+        // Hover preview for party slots
+        $(document).on('mouseenter', '.team-overview-slot:not(.empty)', function () {
+            var side = $(this).data('side');
+            var index = $(this).data('slot-index');
+
+            if (side === 'p1') {
+                uiState.p1HoverOverride = index;
+                uiState.p1BoxHoverOverride = null;
+            } else {
+                uiState.p2HoverOverride = index;
+                uiState.p2BoxHoverOverride = null;
+            }
+            renderStage();
+        });
+
+        // Hover preview for box slots
+        $(document).on('mouseenter', '.box-slot:not(.empty)', function () {
+            var side = $(this).closest('.box-container').attr('id').endsWith('p1') ? 'p1' : 'p2';
+            var index = $(this).data('slot-index');
+
+            if (side === 'p1') {
+                uiState.p1BoxHoverOverride = index;
+                uiState.p1HoverOverride = null;
+            } else {
+                uiState.p2BoxHoverOverride = index;
+                uiState.p2HoverOverride = null;
+            }
+            renderStage();
+        });
+
+        // Use the wrapper level mouseleave for better reliability
+        $(document).on('mouseleave', '.team-overview, .box-container', function () {
+            uiState.p1HoverOverride = null;
+            uiState.p2HoverOverride = null;
+            uiState.p1BoxHoverOverride = null;
+            uiState.p2BoxHoverOverride = null;
+            renderStage();
+        });
+
+        // Fail-safe: clear overrides when mouse leaves the entire planner
+        $(document).on('mouseleave', '#battle-planner', function () {
+            uiState.p1HoverOverride = null;
+            uiState.p2HoverOverride = null;
+            uiState.p1BoxHoverOverride = null;
+            uiState.p2BoxHoverOverride = null;
+            renderStage();
+        });
+
+        // Individual slot leave
+        $(document).on('mouseleave', '.team-overview-slot', function () {
+            var side = $(this).data('side');
+            var index = $(this).data('slot-index');
+
+            if (side === 'p1' && uiState.p1HoverOverride === index) {
+                uiState.p1HoverOverride = null;
+                renderStage();
+            } else if (side === 'p2' && uiState.p2HoverOverride === index) {
+                uiState.p2HoverOverride = null;
+                renderStage();
+            }
+        });
+
+        $(document).on('mouseleave', '.box-slot', function () {
+            var side = $(this).closest('.box-container').attr('id').endsWith('p1') ? 'p1' : 'p2';
+            var index = $(this).data('slot-index');
+
+            if (side === 'p1' && uiState.p1BoxHoverOverride === index) {
+                uiState.p1BoxHoverOverride = null;
+                renderStage();
+            } else if (side === 'p2' && uiState.p2BoxHoverOverride === index) {
+                uiState.p2BoxHoverOverride = null;
+                renderStage();
             }
         });
 
@@ -1717,12 +1797,52 @@
 
         $('#stage-turn-label').text('TURN ' + state.turnNumber);
 
-        renderPokemonCard('p1', state.p1.active);
-        renderPokemonCard('p2', state.p2.active);
-        renderSpeedComparison(state);
-        renderTeamOverview('p1', state.p1.team, state.p1.teamSlot);
-        renderTeamOverview('p2', state.p2.team, state.p2.teamSlot);
-        renderBoxes();
+        // Get the effective active Pokemon (taking hover overrides into account)
+        var p1Active = state.p1.active;
+        if (uiState.p1HoverOverride !== null && state.p1.team[uiState.p1HoverOverride]) {
+            p1Active = state.p1.team[uiState.p1HoverOverride];
+        } else if (uiState.p1BoxHoverOverride !== null && uiState.p1Box[uiState.p1BoxHoverOverride]) {
+            p1Active = uiState.p1Box[uiState.p1BoxHoverOverride];
+        }
+
+        var p2Active = state.p2.active;
+        if (uiState.p2HoverOverride !== null && state.p2.team[uiState.p2HoverOverride]) {
+            p2Active = state.p2.team[uiState.p2HoverOverride];
+        } else if (uiState.p2BoxHoverOverride !== null && uiState.p2Box[uiState.p2BoxHoverOverride]) {
+            p2Active = uiState.p2Box[uiState.p2BoxHoverOverride];
+        }
+
+        renderPokemonCard('p1', p1Active);
+        renderPokemonCard('p2', p2Active);
+
+        // Pass active Pokemon to speed comparison to ensure it uses overrides
+        renderSpeedComparison(state, p1Active, p2Active);
+
+        // Surgical update of highlights to avoid destroying elements during hover
+        // This ensures snappy performance and reliable mouseleave events
+        // CRITICAL: Destroying DOM elements during hover breaks Drag and Drop!
+        var isHoveringParty = uiState.p1HoverOverride !== null || uiState.p2HoverOverride !== null;
+        var isHoveringBox = uiState.p1BoxHoverOverride !== null || uiState.p2BoxHoverOverride !== null;
+        var isHovering = isHoveringParty || isHoveringBox;
+
+        var p1ActiveSlot = uiState.p1HoverOverride !== null ? uiState.p1HoverOverride : state.p1.teamSlot;
+        var p2ActiveSlot = uiState.p2HoverOverride !== null ? uiState.p2HoverOverride : state.p2.teamSlot;
+
+        // If not hovering anywhere, or if we moved to a new node, do a full render
+        if (!isHovering || uiState.lastRenderedNodeId !== currentNode.id) {
+            renderTeamOverview('p1', state.p1.team, p1ActiveSlot);
+            renderTeamOverview('p2', state.p2.team, p2ActiveSlot);
+            renderBoxes();
+            uiState.lastRenderedNodeId = currentNode.id;
+        } else {
+            // Just update highlights surgically to keep DOM elements alive
+            // This is essential for both "snappy" feels and functional Drag & Drop
+            updateTeamSlotHighlights('p1', p1ActiveSlot);
+            updateTeamSlotHighlights('p2', p2ActiveSlot);
+            updateBoxHighlights('p1', uiState.p1BoxHoverOverride);
+            updateBoxHighlights('p2', uiState.p2BoxHoverOverride);
+        }
+
         renderInspector(currentNode);
 
         // Moves are now rendered in the Pokemon cards directly
@@ -1877,9 +1997,16 @@
      */
     function renderMoves(side, pokemon) {
         var prefix = 'stage-' + side;
-        var defender = side === 'p1' ?
-            uiState.tree.getCurrentNode()?.state.p2.active :
-            uiState.tree.getCurrentNode()?.state.p1.active;
+        var defender;
+        if (side === 'p1') {
+            defender = (uiState.p2HoverOverride !== null && uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride]) ?
+                uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride] :
+                uiState.tree.getCurrentNode()?.state.p2.active;
+        } else {
+            defender = (uiState.p1HoverOverride !== null && uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride]) ?
+                uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride] :
+                uiState.tree.getCurrentNode()?.state.p1.active;
+        }
 
         var selectedAction = side === 'p1' ? uiState.p1Action : uiState.p2Action;
         var gen = getGenNum();
@@ -2327,17 +2454,22 @@
     /**
      * Render speed comparison
      */
-    function renderSpeedComparison(state) {
+    function renderSpeedComparison(state, p1ActiveOverride, p2ActiveOverride) {
         var $text = $('#speed-text');
+
+        // Use overrides if provided, otherwise fallback to current state
+        var p1Active = p1ActiveOverride || (state.p1 ? state.p1.active : null);
+        var p2Active = p2ActiveOverride || (state.p2 ? state.p2.active : null);
 
         // Get speed comparison - handle both prototype method and manual calculation
         var comparison;
-        if (typeof state.getSpeedComparison === 'function') {
+        if (typeof state.getSpeedComparison === 'function' && !p1ActiveOverride && !p2ActiveOverride) {
             comparison = state.getSpeedComparison();
         } else {
-            // Manual calculation if method is missing (cloned state)
-            var p1Speed = state.p1.active ? (state.p1.active.stats ? state.p1.active.stats.spe : 100) : 100;
-            var p2Speed = state.p2.active ? (state.p2.active.stats ? state.p2.active.stats.spe : 100) : 100;
+            // Manual calculation if method is missing (cloned state) or if overrides are present
+            var p1Speed = p1Active ? (p1Active.getEffectiveSpeed ? p1Active.getEffectiveSpeed(state.field) : (p1Active.stats ? p1Active.stats.spe : 100)) : 100;
+            var p2Speed = p2Active ? (p2Active.getEffectiveSpeed ? p2Active.getEffectiveSpeed(state.field) : (p2Active.stats ? p2Active.stats.spe : 100)) : 100;
+
             comparison = {
                 p1Speed: p1Speed,
                 p2Speed: p2Speed,
@@ -2349,16 +2481,49 @@
         if (comparison.speedTie) {
             $text.html('<span class="speed-tie">Speed Tie! (' + comparison.p1Speed + ')</span>');
         } else if (comparison.p1First) {
-            var p1Name = state.p1.active ? state.p1.active.name : 'P1';
+            var p1Name = p1Active ? p1Active.name : 'P1';
             $text.html('<span class="speed-p1">' + p1Name + ' moves first</span> <span class="speed-values">(' + comparison.p1Speed + ' vs ' + comparison.p2Speed + ')</span>');
         } else {
-            var p2Name = state.p2.active ? state.p2.active.name : 'P2';
+            var p2Name = p2Active ? p2Active.name : 'P2';
             $text.html('<span class="speed-p2">' + p2Name + ' moves first</span> <span class="speed-values">(' + comparison.p2Speed + ' vs ' + comparison.p1Speed + ')</span>');
         }
 
         if (state.field && state.field.trickRoom) {
             $text.append(' <span class="trick-room-badge">Trick Room!</span>');
         }
+    }
+
+    /**
+     * Update only the highlights of the team slots (e.g. during hover)
+     * This avoids destroying DOM elements and breaking mouse event tracking.
+     */
+    function updateTeamSlotHighlights(side, activeSlot) {
+        var $container = $('#team-overview-slots-' + side);
+        $container.find('.team-overview-slot').each(function () {
+            var $slot = $(this);
+            var index = $slot.data('slot-index');
+            if (index == activeSlot) {
+                $slot.addClass('active');
+            } else {
+                $slot.removeClass('active');
+            }
+        });
+    }
+
+    /**
+     * Update only the highlights of the box slots (e.g. during hover)
+     */
+    function updateBoxHighlights(side, activeSlot) {
+        var $container = $('#box-slots-' + side);
+        $container.find('.box-slot').each(function () {
+            var $slot = $(this);
+            var index = $slot.data('slot-index');
+            if (index == activeSlot) {
+                $slot.addClass('active');
+            } else {
+                $slot.removeClass('active');
+            }
+        });
     }
 
     /**
@@ -2454,7 +2619,12 @@
             var spriteUrl = 'https://raw.githubusercontent.com/May8th1995/sprites/master/' + poke.name + '.png';
             var fallbackUrl = 'https://play.pokemonshowdown.com/sprites/gen5/' + poke.name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '') + '.png';
 
-            return '<div class="box-slot" data-slot-index="' + i + '" draggable="true">' +
+            var isActive = (side === 'p1' && uiState.p1BoxHoverOverride === i) ||
+                (side === 'p2' && uiState.p2BoxHoverOverride === i);
+            var classes = ['box-slot'];
+            if (isActive) classes.push('active');
+
+            return '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" draggable="true">' +
                 '<img class="box-slot-sprite" src="' + spriteUrl + '" alt="' + poke.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
                 '</div>';
         }).join('');
