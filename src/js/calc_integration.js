@@ -1033,12 +1033,18 @@
             return null;
         }
 
+        // If it's already a Pokemon object, return it (or a clone)
+        if (window.calc && snapshot instanceof window.calc.Pokemon) {
+            return snapshot.clone ? snapshot.clone() : snapshot;
+        }
+
         // Try to use stored Pokemon data first
         if (snapshot._pokemonData && snapshot._pokemonData.clone) {
             try {
                 var cloned = snapshot._pokemonData.clone();
+                // Ensure current state is applied
                 if (typeof snapshot.currentHP === 'number') {
-                    cloned.originalCurHP = snapshot.currentHP;
+                    cloned.curHP = snapshot.currentHP;
                 }
                 if (snapshot.status) {
                     cloned.status = snapshot._statusNameToCode ? snapshot._statusNameToCode(snapshot.status) : '';
@@ -1083,6 +1089,24 @@
             console.error('Failed to create Pokemon from snapshot:', e);
             return null;
         }
+    }
+
+    /**
+     * Create a calc.Field object from snapshot
+     */
+    function snapshotToField(snapshot) {
+        if (!window.calc) return null;
+        var field = new window.calc.Field();
+        if (!snapshot) return field;
+
+        field.weather = snapshot.weather && snapshot.weather !== 'None' ? snapshot.weather : undefined;
+        field.terrain = snapshot.terrain && snapshot.terrain !== 'None' ? snapshot.terrain : undefined;
+        field.isTrickRoom = !!snapshot.trickRoom;
+        field.isGravity = !!snapshot.gravity;
+        field.isMagicRoom = !!snapshot.magicRoom;
+        field.isWonderRoom = !!snapshot.wonderRoom;
+
+        return field;
     }
 
     /**
@@ -1197,6 +1221,7 @@
         getDamageRange: getDamageRange,
         applyOutcomeToState: applyOutcomeToState,
         snapshotToPokemon: snapshotToPokemon,
+        snapshotToField: snapshotToField,
         createStateFromCalculator: createStateFromCalculator,
         formatProbability: formatProbability,
         formatDamagePercent: formatDamagePercent,

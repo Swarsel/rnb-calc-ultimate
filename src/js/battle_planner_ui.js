@@ -86,6 +86,89 @@
      */
     function createPlannerUI() {
         var html = `
+            <style>
+                /* KO Highlighting for Moves (Player side follows Green/GoldOHKO rules) */
+                .move-cell.match-dmg-1 {
+                    background: rgba(76, 175, 80, 0.45) !important;
+                    border-left: 4px solid #4caf50;
+                    box-shadow: inset 0 0 12px rgba(76, 175, 80, 0.5) !important;
+                }
+                .move-cell.match-dmg-2 {
+                    background: rgba(255, 215, 0, 0.45) !important;
+                    border-left: 4px solid #ffd700;
+                    box-shadow: inset 0 0 12px rgba(255, 215, 0, 0.4) !important;
+                }
+                /* Opponent side follows Orange/Red rules */
+                .move-cell.match-dmg-3 {
+                    background: rgba(255, 140, 0, 0.45) !important;
+                    border-left: 4px solid #ff8c00;
+                    box-shadow: inset 0 0 12px rgba(255, 140, 0, 0.5) !important;
+                }
+                .move-cell.match-dmg-4 {
+                    background: rgba(211, 47, 47, 0.45) !important;
+                    border-left: 4px solid #d32f2f;
+                    box-shadow: inset 0 0 12px rgba(211, 47, 47, 0.5) !important;
+                }
+
+                /* Matchup Color Coding (Speed Borders) */
+                .team-overview-slot.match-speed-f, .box-slot.match-speed-f { border-color: #4fc3f7 !important; border-width: 2px !important; }
+                .team-overview-slot.match-speed-t, .box-slot.match-speed-t { border-color: #ba68c8 !important; border-width: 2px !important; }
+                .team-overview-slot.match-speed-s, .box-slot.match-speed-s { border-color: #555 !important; border-width: 2px !important; }
+
+                /* Matchup Color Coding (OHKO Backgrounds) */
+                .match-dmg-1, .match-dmg-W1 { background: rgba(76, 175, 80, 0.45) !important; box-shadow: inset 0 0 12px rgba(76, 175, 80, 0.5) !important; }
+                .match-dmg-2, .match-dmg-W2 { background: rgba(255, 215, 0, 0.45) !important; box-shadow: inset 0 0 12px rgba(255, 215, 0, 0.4) !important; }
+                .match-dmg-3 { background: rgba(255, 140, 0, 0.45) !important; box-shadow: inset 0 0 12px rgba(255, 140, 0, 0.5) !important; }
+                .match-dmg-4 { background: rgba(211, 47, 47, 0.45) !important; box-shadow: inset 0 0 12px rgba(211, 47, 47, 0.5) !important; }
+                
+                .match-dmg-13, .match-dmg-14, .match-dmg-23, .match-dmg-24 { 
+                    box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.1) !important;
+                }
+                .match-dmg-13 { background: linear-gradient(135deg, rgba(76, 175, 80, 0.5) 50%, rgba(255, 140, 0, 0.5) 50%) !important; }
+                .match-dmg-14 { background: linear-gradient(135deg, rgba(76, 175, 80, 0.5) 50%, rgba(211, 47, 47, 0.5) 50%) !important; }
+                .match-dmg-23 { background: linear-gradient(135deg, rgba(255, 215, 0, 0.5) 50%, rgba(255, 140, 0, 0.5) 50%) !important; }
+                .match-dmg-24 { background: linear-gradient(135deg, rgba(255, 215, 0, 0.5) 50%, rgba(211, 47, 47, 0.5) 50%) !important; }
+                
+                .match-dmg-W, .match-dmg-W1, .match-dmg-W2 { box-shadow: inset 3px 0 0 #ffffff !important; }
+                .match-dmg-W { background: none !important; }
+
+                .match-dmg-1 img, .match-dmg-2 img, .match-dmg-3 img, .match-dmg-4 img, 
+                .match-dmg-13 img, .match-dmg-14 img, .match-dmg-23 img, .match-dmg-24 img,
+                .match-dmg-W img, .match-dmg-WMO img {
+                    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
+                }
+
+                /* Legend Styles */
+                .legend-divider {
+                    height: 1px;
+                    background: rgba(255,255,255,0.1);
+                    margin: 8px 0;
+                }
+                .legend-swatch {
+                    display: inline-block;
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 3px;
+                    margin-right: 8px;
+                    vertical-align: middle;
+                    border: 1px solid rgba(255,255,255,0.4);
+                    box-sizing: border-box;
+                }
+                .legend-swatch.match-speed-f { border: 2px solid #4fc3f7; }
+                .legend-swatch.match-speed-t { border: 2px solid #ba68c8; }
+                .legend-swatch.match-speed-s { border: 2px solid #555; }
+                .legend-item {
+                    display: flex !important;
+                    align-items: center;
+                    margin-bottom: 4px;
+                    font-size: 0.85em;
+                }
+                .legend-item .tree-ko-marker {
+                    margin-right: 8px;
+                    width: 14px;
+                    text-align: center;
+                }
+            </style>
             <div id="battle-planner" class="battle-planner-container" style="display: none;">
                 <div class="planner-header">
                     <h2 class="planner-title">
@@ -1812,15 +1895,17 @@
             p2Active = uiState.p2Box[uiState.p2BoxHoverOverride];
         }
 
-        renderPokemonCard('p1', p1Active);
-        renderPokemonCard('p2', p2Active);
+        renderPokemonCard('p1', p1Active, p2Active);
+        renderPokemonCard('p2', p2Active, p1Active);
+
+        // Convert to real Pokemon objects for matchup and speed logic
+        var p1ActiveObj = CalcIntegration.snapshotToPokemon(p1Active, gen);
+        var p2ActiveObj = CalcIntegration.snapshotToPokemon(p2Active, gen);
 
         // Pass active Pokemon to speed comparison to ensure it uses overrides
-        renderSpeedComparison(state, p1Active, p2Active);
+        renderSpeedComparison(state, p1ActiveObj, p2ActiveObj);
 
-        // Surgical update of highlights to avoid destroying elements during hover
-        // This ensures snappy performance and reliable mouseleave events
-        // CRITICAL: Destroying DOM elements during hover breaks Drag and Drop!
+        // Surgical update of highlights
         var isHoveringParty = uiState.p1HoverOverride !== null || uiState.p2HoverOverride !== null;
         var isHoveringBox = uiState.p1BoxHoverOverride !== null || uiState.p2BoxHoverOverride !== null;
         var isHovering = isHoveringParty || isHoveringBox;
@@ -1830,17 +1915,16 @@
 
         // If not hovering anywhere, or if we moved to a new node, do a full render
         if (!isHovering || uiState.lastRenderedNodeId !== currentNode.id) {
-            renderTeamOverview('p1', state.p1.team, p1ActiveSlot);
-            renderTeamOverview('p2', state.p2.team, p2ActiveSlot);
-            renderBoxes();
+            renderTeamOverview('p1', state.p1.team, p1ActiveSlot, p2Active);
+            renderTeamOverview('p2', state.p2.team, p2ActiveSlot, p1Active);
+            renderBoxes(p2Active);
             uiState.lastRenderedNodeId = currentNode.id;
         } else {
             // Just update highlights surgically to keep DOM elements alive
-            // This is essential for both "snappy" feels and functional Drag & Drop
-            updateTeamSlotHighlights('p1', p1ActiveSlot);
-            updateTeamSlotHighlights('p2', p2ActiveSlot);
-            updateBoxHighlights('p1', uiState.p1BoxHoverOverride);
-            updateBoxHighlights('p2', uiState.p2BoxHoverOverride);
+            updateTeamSlotHighlights('p1', p1ActiveSlot, p2Active);
+            updateTeamSlotHighlights('p2', p2ActiveSlot, p1Active);
+            updateBoxHighlights('p1', uiState.p1BoxHoverOverride, p2Active);
+            updateBoxHighlights('p2', uiState.p2BoxHoverOverride, p1Active);
         }
 
         renderInspector(currentNode);
@@ -1854,7 +1938,7 @@
     /**
      * Render Pokemon card
      */
-    function renderPokemonCard(side, pokemon) {
+    function renderPokemonCard(side, pokemon, defender) {
         var prefix = 'stage-' + side;
 
         if (!pokemon) {
@@ -1989,23 +2073,26 @@
         $('#' + prefix + '-stats-mini').html(statsHtml);
 
         // Render moves with damage preview
-        renderMoves(side, pokemon);
+        renderMoves(side, pokemon, defender);
     }
 
     /**
      * Render moves with full damage info like base calc (damage ranges, crit, effects)
      */
-    function renderMoves(side, pokemon) {
+    function renderMoves(side, pokemon, defenderOverride) {
         var prefix = 'stage-' + side;
-        var defender;
-        if (side === 'p1') {
-            defender = (uiState.p2HoverOverride !== null && uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride]) ?
-                uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride] :
-                uiState.tree.getCurrentNode()?.state.p2.active;
-        } else {
-            defender = (uiState.p1HoverOverride !== null && uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride]) ?
-                uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride] :
-                uiState.tree.getCurrentNode()?.state.p1.active;
+        var defender = defenderOverride;
+
+        if (!defender) {
+            if (side === 'p1') {
+                defender = (uiState.p2HoverOverride !== null && uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride]) ?
+                    uiState.tree.getCurrentNode().state.p2.team[uiState.p2HoverOverride] :
+                    uiState.tree.getCurrentNode()?.state.p2.active;
+            } else {
+                defender = (uiState.p1HoverOverride !== null && uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride]) ?
+                    uiState.tree.getCurrentNode().state.p1.team[uiState.p1HoverOverride] :
+                    uiState.tree.getCurrentNode()?.state.p1.active;
+            }
         }
 
         var selectedAction = side === 'p1' ? uiState.p1Action : uiState.p2Action;
@@ -2030,6 +2117,18 @@
             if (priority > 0) cellClasses.push('priority-move');
             if (priority < 0) cellClasses.push('negative-priority');
             if (moveData && moveData.category === 'Status') cellClasses.push('status-move');
+
+            // Damage-based Highlighting (Inherit colors from matchup scheme)
+            var defenderHP = defender ? (defender.currentHP !== undefined ? defender.currentHP : defender.maxHP) : 100;
+            if (normalDamage && normalDamage.rawMax > 0 && moveData && moveData.category !== 'Status') {
+                if (side === 'p1') {
+                    if (normalDamage.rawMin >= defenderHP) cellClasses.push('match-dmg-1');
+                    else if (normalDamage.rawMax >= defenderHP) cellClasses.push('match-dmg-2');
+                } else {
+                    if (normalDamage.rawMin >= defenderHP) cellClasses.push('match-dmg-4');
+                    else if (normalDamage.rawMax >= defenderHP) cellClasses.push('match-dmg-3');
+                }
+            }
 
             movesHtml += '<button class="' + cellClasses.join(' ') + '" data-side="' + side + '" data-index="' + i + '" data-move="' + moveName + '">';
 
@@ -2493,19 +2592,27 @@
         }
     }
 
-    /**
-     * Update only the highlights of the team slots (e.g. during hover)
-     * This avoids destroying DOM elements and breaking mouse event tracking.
-     */
-    function updateTeamSlotHighlights(side, activeSlot) {
-        var $container = $('#team-overview-slots-' + side);
-        $container.find('.team-overview-slot').each(function () {
+    function updateTeamSlotHighlights(side, activeSlot, opponentSnapshot) {
+        var $slots = $('#team-overview-slots-' + side + ' .team-overview-slot');
+        var team = side === 'p1' ? uiState.tree.getCurrentNode().state.p1.team : uiState.tree.getCurrentNode().state.p2.team;
+        var field = uiState.tree.getCurrentNode()?.state.field;
+
+        $slots.each(function (i) {
             var $slot = $(this);
-            var index = $slot.data('slot-index');
-            if (index == activeSlot) {
-                $slot.addClass('active');
-            } else {
-                $slot.removeClass('active');
+            var isActive = i === activeSlot;
+            $slot.toggleClass('active', isActive);
+
+            // Update matchup coding if it's P1
+            if (side === 'p1' && opponentSnapshot && field) {
+                var poke = team[i];
+                if (poke) {
+                    var match = getMatchupState(poke, opponentSnapshot, field);
+                    applyMatchupClasses($slot, match);
+                } else {
+                    clearMatchupClasses($slot);
+                }
+            } else if (side === 'p1') {
+                clearMatchupClasses($slot);
             }
         });
     }
@@ -2513,24 +2620,153 @@
     /**
      * Update only the highlights of the box slots (e.g. during hover)
      */
-    function updateBoxHighlights(side, activeSlot) {
-        var $container = $('#box-slots-' + side);
-        $container.find('.box-slot').each(function () {
+    function updateBoxHighlights(side, hoverIndex, opponentSnapshot) {
+        var $slots = $('#box-slots-' + side + ' .box-slot');
+        var box = side === 'p1' ? uiState.p1Box : uiState.p2Box;
+        var field = uiState.tree.getCurrentNode()?.state.field;
+
+        $slots.each(function (i) {
             var $slot = $(this);
-            var index = $slot.data('slot-index');
-            if (index == activeSlot) {
-                $slot.addClass('active');
-            } else {
-                $slot.removeClass('active');
+            var isHovered = i === hoverIndex;
+            $slot.toggleClass('active', isHovered);
+
+            // Update matchup coding if it's P1
+            if (side === 'p1' && opponentSnapshot && field) {
+                var poke = box[i];
+                if (poke) {
+                    var match = getMatchupState(poke, opponentSnapshot, field);
+                    applyMatchupClasses($slot, match);
+                } else {
+                    clearMatchupClasses($slot);
+                }
+            } else if (side === 'p1') {
+                clearMatchupClasses($slot);
             }
         });
     }
 
     /**
+     * Clear matchup classes from an element
+     */
+    function clearMatchupClasses($el) {
+        if (!$el.attr('class')) return;
+        var classes = $el.attr('class').split(' ');
+        var filtered = classes.filter(function (c) {
+            return !c.startsWith('match-speed-') && !c.startsWith('match-dmg-');
+        });
+        $el.attr('class', filtered.join(' '));
+    }
+
+    /**
+     * Compute and apply matchup classes to an element
+     */
+    function applyMatchupClasses($el, match) {
+        clearMatchupClasses($el);
+        if (match) {
+            $el.addClass('match-speed-' + match.speed);
+            $el.addClass('match-dmg-' + match.code);
+        }
+    }
+
+    function getMatchupState(snapshot, opponentSnapshot, fieldSnapshot) {
+        if (!snapshot || !opponentSnapshot || !fieldSnapshot) return null;
+
+        var gen = getGenNum();
+        var pokemon = CalcIntegration.snapshotToPokemon(snapshot, gen);
+        var opponent = CalcIntegration.snapshotToPokemon(opponentSnapshot, gen);
+        var field = CalcIntegration.snapshotToField(fieldSnapshot);
+
+        if (!pokemon || !opponent || !field) return null;
+
+        // Use effective speeds from real Pokemon objects
+        var p1Speed = pokemon.getEffectiveSpeed ? pokemon.getEffectiveSpeed(field) : (pokemon.stats ? pokemon.stats.spe : 100);
+        var p2Speed = opponent.getEffectiveSpeed ? opponent.getEffectiveSpeed(field) : (opponent.stats ? opponent.stats.spe : 100);
+
+        // Handle trick room
+        if (field.isTrickRoom) {
+            var temp = p1Speed;
+            p1Speed = p2Speed;
+            p2Speed = temp;
+        }
+
+        var speedState = p1Speed > p2Speed ? "f" : p1Speed < p2Speed ? "s" : "t";
+
+        var p1KO = 0, p2KO = 0;
+        var p1HD = 0, p2HD = 0;
+
+        // Player moves vs Opponent
+        (snapshot.moves || []).forEach(function (moveName) {
+            if (!moveName || moveName === '(No Move)') return;
+
+            try {
+                var calcMove = new window.calc.Move(gen, moveName);
+                if (calcMove.category === 'Status') return;
+
+                var result = window.calc.calculate(gen, pokemon, opponent, calcMove, field);
+                var range = CalcIntegration.getDamageRange(result);
+                var hits = calcMove.hits || 1;
+
+                var maxDmg = range.max * hits;
+                if (maxDmg === 0) return;
+
+                var maxPct = (maxDmg / opponent.stats.hp) * 100;
+                if (maxPct > p1HD) p1HD = maxPct;
+
+                // KO Detection relative to CURRENT HP
+                var minDmgTotal = range.min * hits;
+                if (minDmgTotal >= opponentSnapshot.currentHP) p1KO = 1;
+                else if (maxDmg >= opponentSnapshot.currentHP && p1KO === 0) p1KO = 2;
+            } catch (e) { }
+        });
+
+        // Opponent moves vs Player
+        var opponentField = field.clone ? field.clone() : CalcIntegration.snapshotToField(fieldSnapshot);
+        if (opponentField.swap) opponentField.swap();
+
+        (opponentSnapshot.moves || []).forEach(function (moveName) {
+            if (!moveName || moveName === '(No Move)') return;
+
+            try {
+                var calcMove = new window.calc.Move(gen, moveName);
+                if (calcMove.category === 'Status') return;
+
+                var result = window.calc.calculate(gen, opponent, pokemon, calcMove, opponentField);
+                var range = CalcIntegration.getDamageRange(result);
+                var hits = calcMove.hits || 1;
+
+                var maxDmg = range.max * hits;
+                if (maxDmg === 0) return;
+
+                var maxPct = (maxDmg / pokemon.stats.hp) * 100;
+                if (maxPct > p2HD) p2HD = maxPct;
+
+                // KO Detection relative to CURRENT HP
+                var minDmgTotal = range.min * hits;
+                if (minDmgTotal >= snapshot.currentHP) p2KO = 4;
+                else if (maxDmg >= snapshot.currentHP && p2KO < 3) p2KO = 3;
+            } catch (e) { }
+        });
+
+        // Result priority: First check if user is at risk, then check if user is walling, then just show dmg codes
+        // Walling: opponent deals < 25% damage (4HKO), player deals 15%+ and at least 2x what opponent deals.
+        var isWall = (p2KO < 3 && p2HD < 25 && p1HD >= 15 && p1HD > p2HD * 2);
+
+        if (isWall) {
+            if (p1KO === 1) return { speed: speedState, code: "W1" }; // Wall + Guaranteed OHKO
+            if (p1KO === 2) return { speed: speedState, code: "W2" }; // Wall + Possible OHKO
+            return { speed: speedState, code: "W" }; // Pure Wall
+        }
+
+        var code = (p1KO > 0 ? p1KO.toString() : "") + (p2KO > 0 ? p2KO.toString() : "");
+        return { speed: speedState, code: code || "none" };
+    }
+
+    /**
      * Render full team overview
      */
-    function renderTeamOverview(side, team, activeSlot) {
+    function renderTeamOverview(side, team, activeSlot, opponent) {
         var $container = $('#team-overview-slots-' + side);
+        var field = uiState.tree.getCurrentNode()?.state.field;
 
         if (!team || team.length === 0) {
             if (side === 'p1') {
@@ -2551,6 +2787,15 @@
                 var classes = ['team-overview-slot'];
                 if (isActive) classes.push('active');
                 if (isFainted) classes.push('fainted');
+
+                // Add matchup classes for P1
+                if (side === 'p1' && opponent && field) {
+                    var match = getMatchupState(poke, opponent, field);
+                    if (match) {
+                        classes.push('match-speed-' + match.speed);
+                        classes.push('match-dmg-' + match.code);
+                    }
+                }
 
                 // Calculate HP percentage properly
                 var hpPercent = poke.maxHP > 0 ? Math.round((poke.currentHP / poke.maxHP) * 100) : 0;
@@ -2599,15 +2844,16 @@
     /**
      * Render boxes
      */
-    function renderBoxes() {
+    function renderBoxes(opponent) {
         // Only render P1 box - P2 doesn't have a box (always full team)
-        renderBox('p1', uiState.p1Box);
+        renderBox('p1', uiState.p1Box, opponent);
         // Hide P2 box container since opponent always has full team
         $('#box-container-p2').hide();
     }
 
-    function renderBox(side, box) {
+    function renderBox(side, box, opponent) {
         var $container = $('#box-slots-' + side);
+        var field = uiState.tree.getCurrentNode()?.state.field;
 
         if (!box || box.length === 0) {
             $container.html('<div class="box-slot" data-slot-index="0"><span class="box-slot-empty">+</span></div>');
@@ -2623,6 +2869,15 @@
                 (side === 'p2' && uiState.p2BoxHoverOverride === i);
             var classes = ['box-slot'];
             if (isActive) classes.push('active');
+
+            // Add matchup classes for P1
+            if (side === 'p1' && opponent && field) {
+                var match = getMatchupState(poke, opponent, field);
+                if (match) {
+                    classes.push('match-speed-' + match.speed);
+                    classes.push('match-dmg-' + match.code);
+                }
+            }
 
             return '<div class="' + classes.join(' ') + '" data-slot-index="' + i + '" draggable="true">' +
                 '<img class="box-slot-sprite" src="' + spriteUrl + '" alt="' + poke.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
@@ -2766,14 +3021,24 @@
             outcomeHtml += '</div>';
         }
 
-        // Show legend for timeline symbols
+        // Show legend
         if (!$('#inspector-legend').length) {
             $('#inspector-container').append(
                 '<div id="inspector-legend" class="inspector-section">' +
-                '<h4>Timeline Legend</h4>' +
+                '<h4>Legend</h4>' +
                 '<div class="legend-items">' +
-                '<span class="legend-item"><span class="tree-ko-marker p2-ko">✓</span> Opponent KO\'d (good)</span>' +
-                '<span class="legend-item"><span class="tree-ko-marker p1-ko">✗</span> Your Pokemon KO\'d (bad)</span>' +
+                '<span class="legend-item"><span class="tree-ko-marker p2-ko">✓</span> Best Outcome</span>' +
+                '<span class="legend-item"><span class="tree-ko-marker p1-ko">✗</span> Worst Outcome</span>' +
+                '<div class="legend-divider"></div>' +
+                '<span class="legend-item"><span class="legend-swatch match-dmg-1"></span> Guaranteed OHKO</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-dmg-2"></span> Possible OHKO</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-dmg-3"></span> Risk of KO</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-dmg-4"></span> Guaranteed Faint</span>' +
+                '<div class="legend-divider"></div>' +
+                '<span class="legend-item"><span class="legend-swatch match-dmg-W"></span> Walling Defender (White)</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-speed-f"></span> Outspeeds (Blue)</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-speed-s"></span> Slower (Gray)</span>' +
+                '<span class="legend-item"><span class="legend-swatch match-speed-t"></span> Speed Tie (Purple)</span>' +
                 '</div></div>'
             );
         }
