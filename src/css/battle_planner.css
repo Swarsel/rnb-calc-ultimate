@@ -2336,8 +2336,8 @@ body.planner-active {
 
 .ko-replacement-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
 }
 
 .ko-replacement-slot {
@@ -3386,6 +3386,7 @@ body.planner-active {
 .switch-select-sprite {
     width: 48px;
     height: 48px;
+    object-fit: contain;
     image-rendering: pixelated;
 }
 
@@ -3414,6 +3415,18 @@ body.planner-active {
 .switch-hp-fill {
     height: 100%;
     transition: width 0.3s;
+}
+
+.switch-hp-fill.hp-green {
+    background: var(--hp-green);
+}
+
+.switch-hp-fill.hp-yellow {
+    background: var(--hp-yellow);
+}
+
+.switch-hp-fill.hp-red {
+    background: var(--hp-red);
 }
 
 .switch-select-hp-text {

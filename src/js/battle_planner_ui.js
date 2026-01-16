@@ -712,11 +712,18 @@
             $('#switch-select-modal').hide();
         });
         $(document).on('click', '.switch-select-item', function () {
-            var side = $(this).data('side');
-            var index = $(this).data('index');
-            var name = $(this).data('name');
-            setSwitchAction(side, index, name);
-            $('#switch-select-modal').hide();
+            var $modal = $(this).closest('.planner-modal');
+            if ($modal.attr('id') === 'ko-replacement-modal') {
+                var side = $(this).data('side');
+                var index = $(this).data('index');
+                selectKOReplacement(side, index);
+            } else {
+                var side = $(this).data('side');
+                var index = $(this).data('index');
+                var name = $(this).data('name');
+                setSwitchAction(side, index, name);
+                $('#switch-select-modal').hide();
+            }
         });
 
         // Item selection modal
@@ -3468,13 +3475,18 @@
 
         var gridHtml = availableSlots.map(function (slot) {
             var p = slot.pokemon;
-            var spriteName = p.name ? p.name.split('-')[0] : 'unknown';
             var hpPercent = Math.round((p.currentHP / p.maxHP) * 100);
+            var hpColor = hpPercent > 50 ? 'hp-green' : hpPercent > 20 ? 'hp-yellow' : 'hp-red';
+            var spriteUrl = 'https://raw.githubusercontent.com/May8th1995/sprites/master/' + p.name + '.png';
+            var fallbackUrl = 'https://play.pokemonshowdown.com/sprites/gen5/' + p.name.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '') + '.png';
 
-            return '<div class="ko-replacement-slot" data-side="' + side + '" data-index="' + slot.index + '">' +
-                '<img class="ko-slot-sprite" src="https://raw.githubusercontent.com/May8th1995/sprites/master/' + spriteName + '.png" alt="' + p.name + '">' +
-                '<div class="ko-slot-name">' + p.name + '</div>' +
-                '<div class="ko-slot-hp">' + p.currentHP + '/' + p.maxHP + ' (' + hpPercent + '%)</div>' +
+            return '<div class="switch-select-item" data-side="' + side + '" data-index="' + slot.index + '">' +
+                '<img class="switch-select-sprite" src="' + spriteUrl + '" alt="' + p.name + '" onerror="this.src=\'' + fallbackUrl + '\'">' +
+                '<div class="switch-select-info">' +
+                '<div class="switch-select-name">' + p.name + '</div>' +
+                '<div class="switch-select-hp-bar"><div class="switch-hp-fill ' + hpColor + '" style="width: ' + hpPercent + '%"></div></div>' +
+                '<div class="switch-select-hp-text">' + p.currentHP + '/' + p.maxHP + '</div>' +
+                '</div>' +
                 '</div>';
         }).join('');
 
