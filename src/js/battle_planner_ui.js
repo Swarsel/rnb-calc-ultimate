@@ -3500,10 +3500,18 @@
     function selectKOReplacement(side, index) {
         $('#ko-replacement-modal').hide();
 
-        if (!pendingKOReplacement) return;
+        if (!pendingKOReplacement) {
+            console.warn('selectKOReplacement called but no pending replacement found');
+            return;
+        }
 
-        pendingKOReplacement.onComplete(index);
+        // IMPORTANT: Move the callback to a local variable and clear global state 
+        // BEFORE calling it. This prevents nested calls (like U-turn followed by KO)
+        // from accidentally wiping the new pending state.
+        var onComplete = pendingKOReplacement.onComplete;
         pendingKOReplacement = null;
+
+        onComplete(index);
     }
 
     /**
@@ -3650,10 +3658,17 @@
         return effects;
     }
 
+    var isExecutingTurn = false;
+
     /**
      * Execute the full turn with both moves
      */
     function executeTurn() {
+        if (isExecutingTurn) {
+            console.warn('Turn already executing...');
+            return;
+        }
+
         if (!uiState.p1Action || !uiState.p2Action) {
             alert('Please select moves for both Pokemon');
             return;
@@ -3667,6 +3682,7 @@
 
         // Execute the turn
         try {
+            isExecutingTurn = true;
             var newState = currentNode.state.clone();
 
             var p1IsSwitch = uiState.p1Action.type === 'switch';
@@ -3732,18 +3748,22 @@
                 var firstAttacker = newState[firstMover].active;
                 var firstDefender = newState[secondMover].active;
                 applyMoveToStateEnhanced(firstAttacker, firstDefender, firstAction, gen, newState);
+
+                // NEW: Track both attacker and defender faints
                 firstKO = firstDefender.currentHP <= 0;
+                var firstAttackerFainted = firstAttacker.currentHP <= 0;
+
+                // NEW: Sync after first move
+                syncActiveToTeam(newState);
 
                 // Check for switch-after-move (U-turn, Volt Switch)
-                // This switch happens IMMEDIATELY after the move, before opponent attacks
-                if (firstAttacker.needsSwitchAfterMove && firstAttacker.currentHP > 0) {
+                if (firstAttacker.needsSwitchAfterMove && !firstAttackerFainted) {
                     pendingSwitchAfterMove[firstMover] = true;
                     delete firstAttacker.needsSwitchAfterMove;
                 }
 
                 // Check for forced switch on target (Roar, Whirlwind)
-                // Target hasn't moved yet if they're slower, so they'll switch instead of attacking
-                if (firstDefender.needsForcedSwitch && firstDefender.currentHP > 0) {
+                if (firstDefender.needsForcedSwitch && !firstKO) {
                     pendingForcedSwitch[secondMover] = true;
                     delete firstDefender.needsForcedSwitch;
                 }
@@ -3752,37 +3772,51 @@
             // --- Execute second action (if second mover not KO'd and not forced to switch) ---
             // This is wrapped in a function so we can handle U-turn/Volt Switch switches first
             var executeSecondAction = function (onSecondActionComplete) {
-                var secondAttacker = newState[secondMover].active;
-                var secondDefender = newState[firstMover].active;
-                var secondAttackerKO = secondAttacker.currentHP <= 0;
+                try {
+                    var secondAttacker = newState[secondMover].active;
+                    var secondDefender = newState[firstMover].active;
+                    var secondAttackerKO = secondAttacker.currentHP <= 0;
 
-                // Explicitly check for forced switch
-                var secondForcedToSwitch = pendingForcedSwitch[secondMover];
+                    // Explicitly check for forced switch
+                    var secondForcedToSwitch = pendingForcedSwitch[secondMover];
 
-                if (!secondAttackerKO && !secondForcedToSwitch) {
-                    if (secondIsSwitch) {
-                        performSwitch(secondMover, secondAction, newState);
-                    } else {
-                        // Re-get the defender - this now picks up the switched-in Pokemon from U-turn
-                        secondDefender = newState[firstMover].active;
-                        applyMoveToStateEnhanced(secondAttacker, secondDefender, secondAction, gen, newState);
-                        secondKO = secondDefender.currentHP <= 0;
+                    if (!secondAttackerKO && !secondForcedToSwitch) {
+                        if (secondIsSwitch) {
+                            performSwitch(secondMover, secondAction, newState);
+                        } else {
+                            // Re-get the defender - this now picks up the switched-in Pokemon from U-turn
+                            secondDefender = newState[firstMover].active;
+                            console.log('Executing second move against:', secondDefender.name, 'HP:', secondDefender.currentHP);
+                            applyMoveToStateEnhanced(secondAttacker, secondDefender, secondAction, gen, newState);
 
-                        // Check for switch-after-move on second mover
-                        if (secondAttacker.needsSwitchAfterMove && secondAttacker.currentHP > 0) {
-                            pendingSwitchAfterMove[secondMover] = true;
-                            delete secondAttacker.needsSwitchAfterMove;
-                        }
+                            // secondKO tracks the defender of the second move
+                            secondKO = secondDefender.currentHP <= 0;
+                            // Check if attacker fainted from recoil too
+                            var secondAttackerFainted = secondAttacker.currentHP <= 0;
 
-                        // Check for forced switch on first mover (Roar/Whirlwind)
-                        if (secondDefender.needsForcedSwitch && secondDefender.currentHP > 0) {
-                            pendingForcedSwitch[firstMover] = true;
-                            delete secondDefender.needsForcedSwitch;
+                            console.log('Second move result - defender KO:', secondKO, 'attacker KO:', secondAttackerFainted);
+
+                            // NEW: Sync after second move
+                            syncActiveToTeam(newState);
+
+                            // Check for switch-after-move on second mover
+                            if (secondAttacker.needsSwitchAfterMove && !secondAttackerFainted) {
+                                pendingSwitchAfterMove[secondMover] = true;
+                                delete secondAttacker.needsSwitchAfterMove;
+                            }
+
+                            // Check for forced switch on first mover (Roar/Whirlwind)
+                            if (secondDefender.needsForcedSwitch && !secondKO) {
+                                pendingForcedSwitch[firstMover] = true;
+                                delete secondDefender.needsForcedSwitch;
+                            }
                         }
                     }
+                } catch (e) {
+                    console.error('Error in executeSecondAction:', e);
+                } finally {
+                    onSecondActionComplete();
                 }
-
-                onSecondActionComplete();
             };
 
             // Define the continuation function that handles everything after actions
@@ -3812,6 +3846,7 @@
                 var p2Name = state.p2.active.name;
 
                 function getActionDesc(actionObj, name) {
+                    if (!actionObj) return name + ' does nothing';
                     if (actionObj.type === 'switch') {
                         return name + ' switches to ' + actionObj.targetName;
                     } else {
@@ -3860,6 +3895,7 @@
                 // Check if we need KO replacements
                 var needsP1Replacement = p1FaintedAfterEOT || (firstMover === 'p2' && firstKO) || (firstMover === 'p1' && secondKO);
                 var needsP2Replacement = p2FaintedAfterEOT || (firstMover === 'p1' && firstKO) || (firstMover === 'p2' && secondKO);
+                console.log('Replacement needs - P1:', needsP1Replacement, 'P2:', needsP2Replacement, 'firstKO:', firstKO, 'secondKO:', secondKO);
 
                 // Check for switch-after-move effects (U-turn, etc.) - only if not fainted
                 if (!needsP1Replacement && p1NeedsSwitch) {
@@ -3889,7 +3925,9 @@
                         newState.p2.active = newState.p2.team[p2Replacement].clone();
                     }
 
+                    console.log('Completing turn. P1 Slot:', newState.p1.teamSlot, 'P1 Active HP:', newState.p1.active.currentHP);
                     var newNode = uiState.tree.addBranch(currentNode.id, newState, actionRecord, outcome);
+                    console.log('New node added:', newNode.id);
                     uiState.tree.navigate(newNode.id);
 
                     // Reset selections for next turn
@@ -3902,6 +3940,7 @@
 
                     renderTree();
                     renderStage();
+                    isExecutingTurn = false;
                 };
 
                 // Handle KO replacements if needed
@@ -3963,6 +4002,12 @@
         } catch (e) {
             console.error('Failed to execute turn:', e);
             alert('Failed to execute turn: ' + e.message);
+        } finally {
+            // Only clear execution flag if we are NOT waiting for a modal callback
+            // In U-turn/KO cases, we finish in the callback
+            if (!$('#ko-replacement-modal').is(':visible')) {
+                isExecutingTurn = false;
+            }
         }
     }
 
